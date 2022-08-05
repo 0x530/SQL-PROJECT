@@ -1,0 +1,139 @@
+-----------------------------phase 2---------------------------------------------------------------
+-- 1. CREATE FUNCTION TO GET ACCOUNT STATEMENT FOR A GIVEN CUSTOMER ?
+
+CREATE FUNCTION FN_ACC_STATEMENT ( @CSTID BIGINT )
+RETURNS TABLE
+AS
+RETURN
+(
+	SELECT * FROM tblaccAccount
+	INNER JOIN
+	tblCustomer
+	on accCustomerId=cstId 
+	WHERE 
+	cstId=@CSTID
+)
+ 
+
+
+--how to execute function?
+
+SELECT * FROM FN_ACC_STATEMENT(1003)
+
+
+
+--2. List all Banks and their Branches with total number of Accounts in each Branch
+select bankId, bankDetails, brBranchTypeCode,count(*) as total_account
+from 
+tblCustomer
+inner join
+TblaccAccount
+on accCustomerId=cstId  
+inner join
+tblbrBranch
+on brID=cstBranchId   
+inner  join
+TblBank
+on bankId=brBankId  
+group by brBranchTypeCode, bankId, bankDetails
+
+
+-- 3. List total number of Customers for each Branch
+select brid,brBranchName,count(cstid) as total_cust from
+tblbrBranch 
+inner join
+tblCustomer 
+on
+brID=cstBranchid
+group by brid, brBranchName
+
+
+-- 4. Find all Customer Accounts that does not have any Transaction
+SELECT * FROM tblCustomer 
+left outer JOIN
+tblaccAccount
+on accCustomerId=cstId 
+LEFT OUTER JOIN tbltranTransaction 
+on accint=tranAccountint
+where 
+tranID is null
+
+
+-- 5. Find all Customer Accounts that  have all Transaction details
+SELECT * FROM tblCustomer 
+left outer JOIN
+tblaccAccount
+on accCustomerId=cstId 
+LEFT OUTER JOIN tbltranTransaction 
+on accint=tranAccountint
+where 
+tranID is not null
+
+--6. Rank the Customers for each Bank & Branch based on number of Transactions. 
+--   Customer with maximum number of Transaction gets 1 Rank (Position)
+SELECT 
+A.BankDetails, B.brBranchName, c.cstId,E.tranAccountint,
+dense_RANK() OVER (ORDER BY c.cstId desc) AS RANK_value
+FROM tblBank A
+LEFT JOIN tblbrbranch B ON A.BankID=B.brBankId
+LEFT JOIN tblcustomer C ON B.brID = C.cstBranchId
+LEFT JOIN tblaccaccount D ON C.cstId= D.accCustomerId
+LEFT JOIN tbltrantransaction E ON D.accint=E.tranAccountint
+GROUP BY A.BankDetails, B.brBranchName, c.cstId, E.tranaccountint
+ORDER BY RANK_value asc
+
+
+--7. LIST OF ALL CUSTOMERS WITH ACCOUNTS BASED ON ACCOUNT STATUS
+
+select accstatuscode,t.* ,
+dense_RANK() OVER (partition by accstatuscode ORDER BY cstId asc) AS RANK_value
+FROM tblcustomer t inner join tblaccaccount ac on ac.acccustomerid=t.cstid
+
+---------------------------OR---------------------------------------------------
+
+create view v1 as select distinct(t.cstid), ac.accstatuscode from tblcustomer t inner join tblaccaccount ac on ac.acccustomerid=t.cstid group by ac.accstatuscode,cstid
+select v1.accstatuscode,t.*  from tblcustomer t inner join v1 on t.cstid=v1.cstid
+
+-- 8. LIST OF ALL CUSTOMERS WITH ACCOUNTS BASED ON ACCOUNT STATUS & TYPES WITHOUT ANY TRANSACTIONS
+
+create view v2 as 
+select distinct(t.cstid), ac.accstatuscode,acctypecode from tblcustomer t inner join tblaccaccount ac on ac.acccustomerid=t.cstid where accint  in 
+(select tranaccountint from tbltrantransaction) group by ac.accstatuscode,acctypecode,cstid 
+select v2.accstatuscode,v2.acctypecode,t.*  from tblcustomer t inner join v2 on t.cstid=v2.cstid
+
+
+-- 9. LIST OF ALL BANKS BASED ON CUSTOMERS AND TRANSACTION AMOUNTS
+
+select bankdetails,cstfirstname,cstlastname,tranamount from tbltrantransaction t inner join tblaccaccount ta on t.tranaccountint=ta.accint inner join tblcustomer tc on ta.acccustomerid=tc.cstid inner join tblbrbranch tb on tc.cstbranchid=tb.brbankid inner join tblbank b on tb.brbankid=b.bankid 
+
+
+-- 10. LIST OF ALL BANKS WITH CUSTOMERS BUT NO TRANSACTIONS
+-- LIST ALL CUSTOMERS WITH ACCOUNTS BUT WITHOUT ANY TRANSACTIONS
+
+select bankdetails,cstfirstname,cstlastname,tranamount from tbltrantransaction t inner join tblaccaccount ta on t.tranaccountint=ta.accint inner join tblcustomer tc on ta.acccustomerid=tc.cstid inner join tblbrbranch tb on tc.cstbranchid=tb.brbankid inner join tblbank b on tb.brbankid=b.bankid where accint not in ( select tranaccountint from tbltrantransaction)
+
+select cstid from tblcustomer where cstid in( select acccustomerid from tblaccaccount where accint not in ( select tranaccountint from tbltrantransaction))
+
+
+-- 11. LIST OF ALL ZIP CODES WITH MISSING CUSTOMER ADDRESS
+
+select addpostcode from tbladdaddress where addid in (select cstaddid from tblcustomer where cstaddid is  null)
+
+ -- 12. MONTHLY STATEMENT transactions for a given month for a given customer id
+  
+create proc mstmt (@month int,@custid int)
+as
+begin
+declare @t bigint=(select sum(tranamount) from tbltrantransaction tt inner join tblaccaccount tc on tt.tranaccountint=tc.accint inner join tblcustomer t on tc.acccustomerid=t.cstid where month(trandate)=@month and cstid=@custid)
+print('total transaction for custid '+cast(@custid as varchar)+' for month '+cast(@month as varchar)+' is : '+cast(@t as char))
+end
+exec mstmt 6,1001
+
+-- 13. ACCOUNTS WITH DEPOSITS TXNs total deposits by month for any account in 2017
+ 
+select sum(tranamount) as ttl_txn ,month(trandate) month from tbltrantransaction where trantypecode='d' and year(trandate)=2017 group by month(trandate)
+
+
+-- 14. LIST ALL ACCOUNTS total monthly deposits
+ 
+select tranaccountint accno , sum(tranamount) txn_per_month ,month(trandate) momnth from tbltrantransaction group by month(trandate),tranaccountint order by accno,month(trandate)

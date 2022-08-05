@@ -1,0 +1,248 @@
+--1. Whenever to insert the records into transaction table trigger automatically 
+--update the Account table current balance how to achive this?
+
+CREATE TRIGGER T11 ON tbltranTransaction AFTER INSERT
+AS
+BEGIN 
+DECLARE C1 CURSOR FOR SELECT tranamount,tranaccountint,trantypecode FROM tbltranTransaction
+DECLARE @AMOUNT DECIMAL (26,4),@AccNumber BIGINT,@TranType varchar(5)
+OPEN C1
+FETCH NEXT FROM C1 INTO @AMOUNT,@AccNumber,@TranType --START THE LOOP
+WHILE(@@FETCH_STATUS=0)
+BEGIN
+FETCH NEXT FROM C1 INTO @AMOUNT,@AccNumber,@TranType --Continue THE LOOP
+END
+IF @TranType='D' 
+	UPDATE tblaccAccount SET accBalance=accBalance+ @AMOUNT WHERE accint =@AccNumber
+	ELSE 
+	UPDATE tblaccAccount SET accBalance=accBalance- @AMOUNT WHERE accint =@AccNumber
+		
+CLOSE C1
+DEALLOCATE C1
+END
+
+
+--verify
+
+
+INSERT INTO tbltrantransaction VALUES(21009,10000,'D','SELF',GETDATE(),11000,'SELF DEPOSIT')
+
+
+
+
+
+
+SELECT * FROM tbltrantransaction
+select * from tblaccaccount
+
+
+
+
+
+/* 2. Create a trigger tr2 For INSERT,DELETE Triggering 
+event where trigger should be fired if the transaction 
+is performed before 10AM and After 4PM? */
+
+CREATE TRIGGER tr2
+ON dbo.tblaccAccount
+FOR INSERT,DELETE
+AS
+BEGIN
+	IF DATEPART(HH,GETDATE()) not in(10,11,12,13,14,15)
+	BEGIN
+		ROLLBACK
+		RAISERROR('INVALID TIME',1,1)
+	END
+END
+
+
+/*3. create a trigger tr3 for INSERT,DELETE triggering 
+event where trigger should be fired if the transactions are 
+performed on SUNDAY? */
+
+CREATE TRIGGER tr3
+ON dbo.tblaccAccount
+FOR INSERT,DELETE
+AS
+BEGIN
+  IF DATENAME(DW,GETDATE())='Sunday'
+  BEGIN
+    ROLLBACK
+    RAISERROR('CANT INSERT OR DELETE THE DATA ON SUNDAY',1,1)
+  END
+END
+
+
+
+--4.How to report the list of all accounts with their types and status?
+
+select b.accstatuscode,C.acctypecode,tblcustomer.cstfirstname
+from tblcustomer
+inner join 
+tblaccaccount a
+on acccustomerid=cstid
+inner join
+Tblaccaccountstatus b
+on b.accstatuscode=a.accstatuscode
+left outer join
+tblaccaccounttype c
+on c.acctypecode=b.accstatuscode
+
+
+-- 5.How to report the list of all accounts with running totals? 
+create procedure account
+as
+begin
+declare @accint int,@accbalance int
+declare c1 cursor for select accint,accbalance  from tblaccaccount
+open c1
+fetch next from c1 into @accint,@accbalance
+while(@@FETCH_STATUS=0)
+begin
+print cast(@accint as varchar)+'   '+cast(@accbalance as varchar)
+fetch next from c1 into @accint,@accbalance
+end
+close c1
+deallocate c1
+end
+
+--How to execute stored procedure?
+exec account
+
+
+--6.How to report the list of all  branch details with customer details.
+
+create procedure account2
+as
+begin
+declare @branchname varchar(10),@cstid int
+declare c1 cursor for  select tblbrbranch.brbranchname,tblcustomer.cstid from Tblbrbranch inner join
+tblcustomer on tblbrbranch.brid=tblcustomer.cstbranchid;
+open c1
+fetch next from c1 into @branchname,@cstid
+while(@@FETCH_STATUS=0)
+begin
+print @branchname+'   '+cast(@cstid as varchar)
+fetch next from c1 into @branchname,@cstid
+end
+close c1
+deallocate c1
+end
+
+--How to invoke stored procedure?
+exec account2
+
+
+
+--7. create a trigger t2 for INSERT,DELETE triggering  
+--event on Account table where trigger should be fired if the transactions are performed on SUNDAY?
+
+CREATE TRIGGER tr5
+ON tblaccaccount
+FOR INSERT,DELETE
+AS
+BEGIN
+  IF DATENAME(DW,GETDATE())='Sunday'
+  BEGIN
+    ROLLBACK
+    RAISERROR('CANT INSERT OR DELETE THE DATA ON SUNDAY',1,1)
+  END
+END
+
+
+--8. create a trigger tr1 for INSERT,DELETE triggering 
+--event where trigger should be fired if the transactions are performed on 2nd and 4th Saturday?
+
+create TRIGGER saturday_trigger
+ON tblaccaccount
+FOR INSERT,DELETE
+AS
+BEGIN
+declare @counter int=0,@stdate datetime,@enddate datetime
+set @stdate=getdate() - day(getdate()-1)
+set @enddate=getdate()
+while @stdate <= @enddate
+begin
+if datename(dw,@stdate) in('Saturday')   --day of week
+set @counter=@counter+1
+set @stdate=@stdate +1
+end
+  IF DATENAME(DW,GETDATE())='Saturday' and @counter in(2,4)
+  BEGIN
+    ROLLBACK
+    RAISERROR('CANT INSERT OR DELETE THE DATA ON SATURDAY',1,1)
+  END
+END
+
+ASSIGNMENT:
+
+--9.Create a trigger t12 For INSERT Triggering 
+--event where trigger should be fired if the input amount is more than balance (overdraft)
+ALTER TRIGGER overdraft ON tbltranTransaction AFTER INSERT
+AS
+BEGIN 
+DECLARE C1 CURSOR FOR SELECT tranamount,tranaccountint,trantypecode FROM tbltranTransaction
+DECLARE @AMOUNT DECIMAL (26,4),@AccNumber BIGINT,@TranType varchar(5),@accbalance int
+OPEN C1
+FETCH NEXT FROM C1 INTO @AMOUNT,@AccNumber,@TranType --START THE LOOP
+WHILE(@@FETCH_STATUS=0)
+BEGIN
+FETCH NEXT FROM C1 INTO @AMOUNT,@AccNumber,@TranType --Continue THE LOOP
+END
+IF @TranType='W' and @accbalance <@amount
+BEGIN
+	UPDATE tblaccAccount SET accBalance=accBalance - @AMOUNT WHERE accint =@AccNumber
+
+		ROLLBACK
+		RAISERROR('INVALID AMUONT',1,1)
+	END
+	IF @TRANTYPE='D'
+	UPDATE tblaccAccount SET accBalance=accBalance + @AMOUNT WHERE accint =@AccNumber
+		
+CLOSE C1
+DEALLOCATE C1
+END
+
+
+--VERIFY
+
+INSERT INTO tbltrantransaction VALUES(21021,10000,'W','SELF',GETDATE(),34000,'SELF DEPOSIT')
+SELECT * FROM tblaccaccount
+
+
+
+
+-- 10. Create a trigger for DDL triggering event that restricts the droping and altering of a table in a database?
+
+CREATE TRIGGER tr9
+ON DATABASE
+FOR DROP_TABLE,ALTER_TABLE,CREATE_TABLE
+AS
+BEGIN
+   ROLLBACK --cancel the transaction
+   RAISERROR('CANT ALTER OR DROP THE TABLES',15,16)
+END
+
+
+/* 11.Write a database trigger display the message when the inserting trandate is greater than system date
+*/
+alter TRIGGER trandate_OVER
+ON tbltrantransaction
+FOR INSERT
+AS
+BEGIN
+DECLARE @D1 DATETIME
+SELECT @D1=trandate FROM INSERTED
+IF @D1 != GETDATE()
+begin
+rollback
+RAISERROR('INVALID TRANDATE.....',15,1);
+END 
+END
+
+
+--verify
+INSERT INTO tbltrantransaction VALUES(21030,10001,'W','SELF',GETDATE()-1,10000,'SELF DEPOSIT')
+
+
+

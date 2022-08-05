@@ -1,0 +1,25 @@
+1.How to know howmany tables are created in our project?
+
+select * from sys.tables
+
+
+2.How to know how many table relationships are created in our project?
+
+SELECT * FROM information_schema.table_constraints
+WHERE constraint_type in ( 'Primary Key' ,'foreign key')
+
+
+3.What is purpose of each and every tables?
+
+Tables are essential objects in a database because they hold all the information or data. For example, a database for a business can have a banktransactiontype table 
+
+
+4.Each and every tables how many fields are created?
+
+
+DECLARE @TableRowCounts TABLE ([TableName] VARCHAR(128), [RowCount] INT) ;
+INSERT INTO @TableRowCounts ([TableName], [RowCount])
+EXEC sp_MSforeachtable 'SELECT ''?'' [TableName], COUNT(*) [RowCount] FROM ?' ;
+SELECT [TableName], [RowCount]
+FROM @TableRowCounts
+ORDER BY [TableName]
